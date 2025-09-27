@@ -48,7 +48,7 @@ class MainViewModel(
             ) { DeviceListScreen.Screen() },
             Tab(
                 iconRes = R.drawable.ic_alert_outline,
-                selectedIconRes = R.drawable.ic_search,
+                selectedIconRes = R.drawable.ic_alert,
                 text = context.getString(R.string.menu_radar_profiles),
                 selected = false,
             ) { ProfilesListScreen.Screen() },

@@ -108,53 +108,37 @@
 
     <!-- Select filter -->
     <string name="select_filter">Select Filter</string>
-
     <string name="filter_by_name">By Name</string>
     <string name="filter_by_name_description">Triggers when the device name matches the specified substring or regex</string>
-
     <string name="filter_by_address">By Address</string>
     <string name="filter_by_address_disclaimer">The device address</string>
     <string name="filter_by_address_description">Triggers when the device address matches</string>
-
     <string name="filter_by_first_detection_period">By First Detection</string>
     <string name="filter_by_first_detection_period_description">Triggers if the device was first detected during the selected time period</string>
-
     <string name="filter_by_last_detection_period">By Last Detection</string>
     <string name="filter_by_last_detection_period_description">Triggers if the device was last detected during the selected time period</string>
-
     <string name="filter_by_is_favorite">By Favorite</string>
     <string name="filter_by_is_favorite_description">Triggers if the device is marked as a favorite</string>
-
     <string name="filter_by_is_paired">By Paired Status</string>
     <string name="filter_by_is_paired_description">Triggers if the device is paired with your device</string>
-
     <string name="filter_by_manufacturer">By Manufacturer</string>
     <string name="filter_by_manufacturer_description">Triggers when the device\'s chipset manufacturer matches</string>
-
     <string name="filter_by_min_lost_period">By Min Lost Period</string>
     <string name="filter_by_min_lost_period_description">Triggers if a device has been out of range for the selected period. Helps prevent repeated detections if the device stays nearby.</string>
-
     <string name="filter_apple_airdrop_contact">Apple AirDrop Contact</string>
     <string name="filter_apple_airdrop_contact_description">[DEPRECATED] Triggers when the device is an Apple device and the AirDrop contact matches</string>
-
     <string name="filter_device_is_following_me">Device is Following Me</string>
     <string name="filter_device_is_following_me_description">Triggers if a device stays within range and moves with you for the selected time and distance</string>
-
     <string name="filter_any_of">Any Of</string>
     <string name="filter_any_of_description">OR operator for a group of filters</string>
-
     <string name="filter_all_of">All Of</string>
     <string name="filter_all_of_description">AND operator for a group of filters</string>
-
     <string name="filter_not">Not</string>
     <string name="filter_not_description">NOT operator</string>
-
     <string name="filter_device_location">By Device Location</string>
     <string name="filter_device_location_description">Triggers if the device was previously seen at a specific location during the selected time period</string>
-
     <string name="filter_user_location">By Your Location</string>
     <string name="filter_user_location_description">Triggers if you are currently in a specific location. Useful to avoid triggering certain filters at home or at the office</string>
-
     <string name="filter_by_tag">By Tag</string>
     <string name="filter_by_tag_description">Triggers if the device has the selected tag</string>
 
@@ -338,7 +322,7 @@
     <string name="journal_profile_detected">Alert Rule detected: \"%s\"</string>
     <string name="journal_profile_removed">%s (removed)</string>
     <string name="unknown_capital_case">UNKNOWN</string>
-    <string name="journal_placeholder">This is an event journal, the entire history of the radar will be displayed here so as not to lose anything.</string>
+    <string name="journal_placeholder">This is your event journal. All triggered Alerts and app events will be recorded here, so you never miss anything.</string>
 
     <!-- Permissions -->
     <string name="permission_intro_bg_location_text">There are two reasons for background location permission:\n- Part of the functionality is related to the analysis of data regarding the current location of the user.\n- To work correctly with Bluetooth in the background in android, location permission is also required.</string>
