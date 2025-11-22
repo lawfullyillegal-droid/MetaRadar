@@ -26,17 +26,17 @@ class DevicesRepository(
     private val appleContactsDao = appDatabase.appleContactDao()
     private val lastBatch = MutableStateFlow(emptyList<DeviceData>())
     private val allDevices = deviceDao.observeAll()
-        .map { it.toDomainWithAirDrop() }
+        .map { it.toDomain(withAirdropInfo = true) }
 
-    suspend fun getDevices(): List<DeviceData> {
+    suspend fun getDevices(withAirdropInfo: Boolean = false): List<DeviceData> {
         return withContext(Dispatchers.IO) {
-            deviceDao.getAll().toDomainWithAirDrop()
+            deviceDao.getAll().toDomain(withAirdropInfo)
         }
     }
 
     suspend fun getPaginated(offset: Int, limit: Int): List<DeviceData> {
         return withContext(Dispatchers.IO) {
-            deviceDao.getPaginated(offset, limit).toDomainWithAirDrop()
+            deviceDao.getPaginated(offset, limit).toDomain(withAirdropInfo = true)
         }
     }
 
@@ -48,7 +48,7 @@ class DevicesRepository(
                 emptyList()
             } else {
                 val scanTime = lastDevice.lastDetectTimeMs
-                deviceDao.getByLastDetectTime(scanTime).toDomainWithAirDrop()
+                deviceDao.getByLastDetectTime(scanTime).toDomain(withAirdropInfo = true)
             }
         }
     }
@@ -64,7 +64,7 @@ class DevicesRepository(
     suspend fun observeLastBatch(): StateFlow<List<DeviceData>> {
         return lastBatch.apply {
             if (lastBatch.value.isEmpty()) {
-                notifyListeners()
+                notifyLastBatchListener()
             }
         }
     }
@@ -73,14 +73,14 @@ class DevicesRepository(
         withContext(Dispatchers.IO) {
             saveDevices(devices)
             saveContacts(devices)
-            notifyListeners()
+            notifyLastBatchListener()
         }
     }
 
     suspend fun saveDevice(data: DeviceData) {
         withContext(Dispatchers.IO) {
             deviceDao.insert(data.toData())
-            notifyListeners()
+            notifyLastBatchListener()
         }
     }
 
@@ -88,7 +88,7 @@ class DevicesRepository(
         withContext(Dispatchers.IO) {
             val new = device.copy(lastFollowingDetectionTimeMs = detectionTime)
             deviceDao.insert(new.toData())
-            notifyListeners()
+            notifyLastBatchListener()
         }
     }
 
@@ -97,7 +97,7 @@ class DevicesRepository(
             addresses.splitToBatches(DatabaseUtils.getMaxSQLVariablesNumber()).forEach { addressesBatch ->
                 deviceDao.deleteAllByAddress(addressesBatch)
             }
-            notifyListeners()
+            notifyLastBatchListener()
         }
     }
 
@@ -115,7 +115,7 @@ class DevicesRepository(
     suspend fun getAllByAddresses(addresses: List<String>): List<DeviceData> {
         return withContext(Dispatchers.IO) {
             addresses.splitToBatches(DatabaseUtils.getMaxSQLVariablesNumber()).flatMap {
-                deviceDao.findAllByAddresses(addresses).toDomainWithAirDrop()
+                deviceDao.findAllByAddresses(addresses).toDomain(withAirdropInfo = true)
             }
         }
     }
@@ -157,7 +157,7 @@ class DevicesRepository(
         }
     }
 
-    private suspend fun notifyListeners() {
+    private suspend fun notifyLastBatchListener() {
         coroutineScope {
             launch(Dispatchers.Default) {
                 val data = getLastBatch()
@@ -170,6 +170,16 @@ class DevicesRepository(
         return withContext(Dispatchers.IO) {
             val contacts = appleContactsDao.getByAddress(address)
             toDomain(AppleAirDrop(contacts.map { it.toDomain() }))
+        }
+    }
+
+    private suspend fun List<DeviceEntity>.toDomain(withAirdropInfo: Boolean): List<DeviceData> {
+        return withContext(Dispatchers.Default) {
+            if (withAirdropInfo) {
+                toDomainWithAirDrop()
+            } else {
+                map { it.toDomain() }
+            }
         }
     }
 
