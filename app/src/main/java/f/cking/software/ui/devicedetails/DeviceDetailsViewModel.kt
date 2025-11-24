@@ -72,6 +72,10 @@ class DeviceDetailsViewModel(
     private var connectionJob: Job? = null
     var matadataIsFetching by mutableStateOf(false)
 
+    var mapExpanded: Boolean by mutableStateOf(false)
+
+    var useHeatmap: Boolean by mutableStateOf(true)
+
     sealed class ConnectionStatus(@StringRes val statusRes: Int) {
         data class CONNECTED(val gatt: BluetoothGatt) : ConnectionStatus(R.string.device_details_status_connected)
         data object CONNECTING : ConnectionStatus(R.string.device_details_status_connecting)
@@ -438,8 +442,6 @@ class DeviceDetailsViewModel(
     enum class PointsStyle(@StringRes val displayNameRes: Int) {
         MARKERS(R.string.device_history_pint_style_markers),
         PATH(R.string.device_history_pint_style_path),
-
-        HEAT_MAP(R.string.device_history_pint_style_heatmap),
     }
 
     sealed interface MapCameraState {

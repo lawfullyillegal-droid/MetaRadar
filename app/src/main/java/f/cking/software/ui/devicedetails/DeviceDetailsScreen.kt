@@ -78,8 +78,11 @@ import f.cking.software.dateTimeStringFormat
 import f.cking.software.domain.model.DeviceData
 import f.cking.software.domain.model.LocationModel
 import f.cking.software.domain.model.isNullOrEmpty
+import f.cking.software.domain.model.toGeoPoint
+import f.cking.software.domain.model.toLocation
 import f.cking.software.dpToPx
 import f.cking.software.frameRate
+import f.cking.software.mapParallel
 import f.cking.software.ui.AsyncBatchProcessor
 import f.cking.software.ui.map.MapView
 import f.cking.software.ui.tagdialog.TagDialog
@@ -92,11 +95,14 @@ import f.cking.software.utils.graphic.ListItem
 import f.cking.software.utils.graphic.RadarIcon
 import f.cking.software.utils.graphic.RoundedBox
 import f.cking.software.utils.graphic.SignalData
+import f.cking.software.utils.graphic.Switcher
 import f.cking.software.utils.graphic.SystemNavbarSpacer
 import f.cking.software.utils.graphic.TagChip
 import f.cking.software.utils.graphic.ThemedDialog
 import f.cking.software.utils.graphic.infoDialog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import org.osmdroid.events.MapListener
@@ -107,6 +113,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.GroundOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.simplefastpoint.SimpleFastPointOverlay
 import org.osmdroid.views.overlay.simplefastpoint.SimpleFastPointOverlayOptions
@@ -225,7 +232,7 @@ object DeviceDetailsScreen {
             LocationHistory(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(400.dp),
+                    .height(500.dp),
                 deviceData = deviceData,
                 viewModel = viewModel,
                 isMoving = isMoving,
@@ -647,6 +654,19 @@ object DeviceDetailsScreen {
     }
 
     @Composable
+    private fun HeatMapSettings(viewModel: DeviceDetailsViewModel) {
+        Switcher(
+            modifier = Modifier.fillMaxWidth(),
+            value = viewModel.useHeatmap,
+            title = stringResource(R.string.device_history_pint_style_heatmap),
+            subtitle = null,
+            onClick = {
+                viewModel.useHeatmap = !viewModel.useHeatmap
+            }
+        )
+    }
+
+    @Composable
     private fun HistoryPeriod(
         deviceData: DeviceData,
         viewModel: DeviceDetailsViewModel,
@@ -721,6 +741,7 @@ object DeviceDetailsScreen {
                 }
             }
             if (mapIsReady) {
+                HeatMapSettings(viewModel)
                 PointsStyle(viewModel)
                 HistoryPeriod(deviceData = deviceData, viewModel = viewModel)
             }
@@ -776,7 +797,8 @@ object DeviceDetailsScreen {
                 Icon(
                     imageVector = Icons.Outlined.Info,
                     contentDescription = stringResource(R.string.device_map_disclaimer_title),
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier
+                        .size(24.dp)
                         .background(Color.Black.copy(alpha = 0.1f), shape = CircleShape),
                     tint = Color.DarkGray,
                 )
@@ -815,7 +837,7 @@ object DeviceDetailsScreen {
                 },
                 onStart = { map ->
                     isLoading.invoke(true)
-                    map.overlays.clear()
+                    map.overlays.clearPoints()
                     map.invalidate()
                 },
                 onComplete = { map ->
@@ -876,10 +898,18 @@ object DeviceDetailsScreen {
         )
         val mapColorScheme = remember { MapColorScheme(colorScheme.scrim.copy(alpha = 0.6f), Color.Red) }
 
-        LaunchedEffect(mapView, viewModel.pointsState, viewModel.pointsStyle) {
-            if (mapView != null) {
-                val mapUpdate = MapUpdate(viewModel.pointsState, viewModel.cameraState, mapView!!)
+        if (mapView != null) {
+            val mapUpdate = MapUpdate(viewModel.pointsState, viewModel.cameraState, mapView!!)
+            LaunchedEffect(mapView, viewModel.pointsState, viewModel.pointsStyle) {
                 refreshMap(mapUpdate, batchProcessor, mapColorScheme, viewModel.pointsStyle)
+            }
+
+            LaunchedEffect(mapView, viewModel.pointsState) {
+                updateMapCamera(mapUpdate)
+            }
+
+            LaunchedEffect(mapView, viewModel.pointsState, viewModel.useHeatmap) {
+                renderHeatmap(mapUpdate, viewModel)
             }
         }
     }
@@ -903,55 +933,41 @@ object DeviceDetailsScreen {
         val pointColor: Color,
     )
 
-    private fun refreshMap(
-        mapUpdate: MapUpdate,
-        batchProcessor: AsyncBatchProcessor<LocationModel, MapView>,
-        mapColorScheme: MapColorScheme,
-        pointsStyle: DeviceDetailsViewModel.PointsStyle,
-    ) {
-        when (pointsStyle) {
-            DeviceDetailsViewModel.PointsStyle.MARKERS -> {
-                batchProcessor.process(mapUpdate.points, mapUpdate.map)
-            }
 
-            DeviceDetailsViewModel.PointsStyle.PATH -> {
-                batchProcessor.cancel()
-                mapUpdate.map.overlays.clear()
-                val points = mapUpdate.points.map { GeoPoint(it.lat, it.lng) }
-                val polyline = Polyline(mapUpdate.map).apply {
-                    this.setPoints(points)
-                    this.outlinePaint.apply {
-                        color = mapColorScheme.lineColor.toArgb()
-                    }
+    private const val PADDING_METERS = 50.0
+    private const val TILE_SIZE_METERS = 300.0
+
+    private suspend fun renderHeatmap(mapUpdate: MapUpdate, viewModel: DeviceDetailsViewModel) {
+        if (viewModel.useHeatmap) {
+            val locations = mapUpdate.points.map { it.toLocation() }
+            val tiles = HeatMapBitmapFactory.buildTilesWithRenderPadding(locations, TILE_SIZE_METERS, PADDING_METERS)
+            tiles.mapParallel { tile ->
+                val bitmap = withContext(Dispatchers.Default) {
+                    HeatMapBitmapFactory.generateTileGradientBitmapFastSeamless(
+                        positionsAll = locations.map { HeatMapBitmapFactory.Position(it, PADDING_METERS.toFloat()) },
+                        coreTile = tile,
+                        widthPxCore = 250,
+                        renderPaddingMeters = PADDING_METERS,
+                        debugBorderPx = 0,
+                    )
                 }
 
-                mapUpdate.map.overlays.add(polyline)
-
-                val pt = SimplePointTheme(points)
-
-                val paint = Paint().apply {
-                    style = Paint.Style.FILL
-                    setColor(mapColorScheme.pointColor.toArgb())
+                withContext(Dispatchers.Main) {
+                    val heatmapOverlay = GroundOverlay()
+                    heatmapOverlay.setImage(bitmap)
+                    heatmapOverlay.setPosition(tile.topLeft.toGeoPoint(), tile.bottomRight.toGeoPoint())
+                    mapUpdate.map.overlays.add(0, heatmapOverlay)
                 }
 
-                val fastPointOverlayOptions = SimpleFastPointOverlayOptions.getDefaultStyle()
-                    .setAlgorithm(SimpleFastPointOverlayOptions.RenderingAlgorithm.MAXIMUM_OPTIMIZATION)
-                    .setPointStyle(paint)
-                    .setRadius(5f)
-
-                val fastPointOverlay = SimpleFastPointOverlay(pt, fastPointOverlayOptions)
-                mapUpdate.map.overlays.add(fastPointOverlay)
                 mapUpdate.map.invalidate()
             }
-
-            DeviceDetailsViewModel.PointsStyle.HEAT_MAP -> {
-                val heatmapOverlay = GroundOverlay()
-                val tile = HeatMapBitmapFactory.Tile()
-                heatmapOverlay.setImage()
-            }
+        } else {
+            mapUpdate.map.overlays.removeAll { it is GroundOverlay }
+            mapUpdate.map.invalidate()
         }
+    }
 
-
+    private fun updateMapCamera(mapUpdate: MapUpdate) {
         when (val cameraConfig = mapUpdate.cameraState) {
             is DeviceDetailsViewModel.MapCameraState.SinglePoint -> {
                 Timber.d(cameraConfig.toString())
@@ -978,5 +994,52 @@ object DeviceDetailsScreen {
                 mapUpdate.map.invalidate()
             }
         }
+    }
+
+    private fun refreshMap(
+        mapUpdate: MapUpdate,
+        batchProcessor: AsyncBatchProcessor<LocationModel, MapView>,
+        mapColorScheme: MapColorScheme,
+        pointsStyle: DeviceDetailsViewModel.PointsStyle,
+    ) {
+        when (pointsStyle) {
+            DeviceDetailsViewModel.PointsStyle.MARKERS -> {
+                batchProcessor.process(mapUpdate.points, mapUpdate.map)
+            }
+
+            DeviceDetailsViewModel.PointsStyle.PATH -> {
+                batchProcessor.cancel()
+                mapUpdate.map.overlays.clearPoints()
+                val points = mapUpdate.points.map { it.toGeoPoint() }
+                val polyline = Polyline(mapUpdate.map).apply {
+                    this.setPoints(points)
+                    this.outlinePaint.apply {
+                        color = mapColorScheme.lineColor.toArgb()
+                    }
+                }
+
+                mapUpdate.map.overlays.add(polyline)
+
+                val pt = SimplePointTheme(points)
+
+                val paint = Paint().apply {
+                    style = Paint.Style.FILL
+                    setColor(mapColorScheme.pointColor.toArgb())
+                }
+
+                val fastPointOverlayOptions = SimpleFastPointOverlayOptions.getDefaultStyle()
+                    .setAlgorithm(SimpleFastPointOverlayOptions.RenderingAlgorithm.MAXIMUM_OPTIMIZATION)
+                    .setPointStyle(paint)
+                    .setRadius(5f)
+
+                val fastPointOverlay = SimpleFastPointOverlay(pt, fastPointOverlayOptions)
+                mapUpdate.map.overlays.add(fastPointOverlay)
+                mapUpdate.map.invalidate()
+            }
+        }
+    }
+
+    private fun MutableList<Overlay>.clearPoints() {
+        this.removeAll { it !is GroundOverlay }
     }
 }
