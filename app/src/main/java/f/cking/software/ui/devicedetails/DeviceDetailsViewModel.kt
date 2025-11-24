@@ -365,6 +365,10 @@ class DeviceDetailsViewModel(
             pointsStyle = PointsStyle.PATH
         }
 
+        if (fetched.size > MAX_POINTS_FOR_HEATMAP) {
+            useHeatmap = false
+        }
+
         pointsState = fetched
         updateCameraPosition(pointsState, currentLocation)
     }
@@ -466,6 +470,7 @@ class DeviceDetailsViewModel(
     companion object {
         private const val DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION = "00002901-0000-1000-8000-00805f9b34fb"
         private const val MAX_POINTS_FOR_MARKERS = 5_000
+        private const val MAX_POINTS_FOR_HEATMAP = 30_000
         private const val HISTORY_PERIOD_DAY = 24 * 60 * 60 * 1000L // 24 hours
         private const val HISTORY_PERIOD_WEEK = 7 * 24 * 60 * 60 * 1000L // 1 week
         private const val HISTORY_PERIOD_MONTH = 31 * 24 * 60 * 60 * 1000L // 1 month

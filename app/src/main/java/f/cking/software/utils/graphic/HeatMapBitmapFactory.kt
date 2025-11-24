@@ -8,15 +8,18 @@ import android.location.Location
 import androidx.collection.LruCache
 import androidx.core.graphics.createBitmap
 import kotlin.math.abs
+import kotlin.math.atan
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 object HeatMapBitmapFactory {
 
@@ -24,6 +27,59 @@ object HeatMapBitmapFactory {
     data class Tile(val topLeft: Location, val bottomRight: Location) {
 
         val tileId = "${topLeft.latitude},${topLeft.longitude}"
+
+
+        /**
+         * True if this tile intersects (collides) with [other].
+         *
+         * @param inclusiveEdges if true, touching edges count as intersecting.
+         *                       if false, requires positive-area overlap.
+         */
+        fun intersects(other: Tile, inclusiveEdges: Boolean = true): Boolean {
+            val aTop = topLeft.latitude
+            val aBottom = bottomRight.latitude
+            val aLeft = topLeft.longitude
+            val aRight = bottomRight.longitude
+
+            val bTop = other.topLeft.latitude
+            val bBottom = other.bottomRight.latitude
+            val bLeft = other.topLeft.longitude
+            val bRight = other.bottomRight.longitude
+
+            return if (inclusiveEdges) {
+                // Overlap in lat AND overlap in lng, allowing equality at edges.
+                aLeft <= bRight &&
+                        aRight >= bLeft &&
+                        aBottom <= bTop &&
+                        aTop >= bBottom
+            } else {
+                // Strict overlap (positive area)
+                aLeft < bRight &&
+                        aRight > bLeft &&
+                        aBottom < bTop &&
+                        aTop > bBottom
+            }
+        }
+
+        /**
+         * True if this tile fully contains [other] (including borders).
+         */
+        fun contains(other: Tile): Boolean {
+            val aTop = topLeft.latitude
+            val aBottom = bottomRight.latitude
+            val aLeft = topLeft.longitude
+            val aRight = bottomRight.longitude
+
+            val bTop = other.topLeft.latitude
+            val bBottom = other.bottomRight.latitude
+            val bLeft = other.topLeft.longitude
+            val bRight = other.bottomRight.longitude
+
+            return bLeft >= aLeft &&
+                    bRight <= aRight &&
+                    bTop <= aTop &&
+                    bBottom >= aBottom
+        }
 
         fun contains(location: Location, paddingMeters: Double): Boolean {
             require(paddingMeters >= 0)
@@ -448,7 +504,7 @@ object HeatMapBitmapFactory {
      *
      * Neighbor tiles may be empty; they're included as render buffers.
      */
-    fun buildTilesWithRenderPadding(
+    fun buildTilesWithRenderPaddingOld(
         points: List<Location>,
         tileSizeMeters: Double,
         paddingMeters: Double = 0.0
@@ -558,6 +614,114 @@ object HeatMapBitmapFactory {
 
             val (latTop, lngLeft) = toLatLngFromOrigin(x0, y0)
             val (latBottom, lngRight) = toLatLngFromOrigin(x1, y1)
+
+            result.add(
+                Tile(
+                    topLeft = makeLocation(latTop, lngLeft),
+                    bottomRight = makeLocation(latBottom, lngRight)
+                )
+            )
+        }
+
+        return result
+    }
+
+
+    fun buildTilesWithRenderPaddingStable(
+        points: List<Location>,
+        tileSizeMeters: Double,
+        paddingMeters: Double = 0.0
+    ): List<Tile> {
+        if (points.isEmpty() || tileSizeMeters <= 0.0 || paddingMeters < 0.0) return emptyList()
+
+        val N = tileSizeMeters
+        val P = paddingMeters
+
+        // Web Mercator constants (EPSG:3857)
+        val R = 6378137.0
+        val MAX_LAT = 85.05112878
+
+        fun clampLat(lat: Double) = lat.coerceIn(-MAX_LAT, MAX_LAT)
+
+        fun mercatorX(lngDeg: Double): Double {
+            val lonRad = Math.toRadians(lngDeg)
+            return R * lonRad
+        }
+
+        fun mercatorY(latDeg: Double): Double {
+            val latRad = Math.toRadians(clampLat(latDeg))
+            return R * ln(tan(Math.PI / 4.0 + latRad / 2.0))
+        }
+
+        fun inverseMercator(x: Double, y: Double): Pair<Double, Double> {
+            val lonRad = x / R
+            val latRad = 2.0 * atan(exp(y / R)) - Math.PI / 2.0
+            return Math.toDegrees(latRad) to Math.toDegrees(lonRad)
+        }
+
+        data class IJ(val i: Int, val j: Int)
+        val tilesToRender = HashSet<IJ>(points.size * 4)
+
+        fun outwardSteps(distToEdge: Double): Int {
+            if (P <= distToEdge) return 0
+            val extra = P - distToEdge
+            return ceil(extra / N).toInt().coerceAtLeast(1)
+        }
+
+        for (p in points) {
+            val x = mercatorX(p.longitude)
+            val y = mercatorY(p.latitude)
+
+            val i0 = floor(x / N).toInt()
+            val j0 = floor(y / N).toInt()
+            tilesToRender.add(IJ(i0, j0))
+
+            val lx = x - i0 * N          // [0, N)
+            val ly = y - j0 * N          // [0, N)
+
+            val distLeft = lx
+            val distRight = N - lx
+            val distTop = ly
+            val distBottom = N - ly
+
+            val leftSteps = outwardSteps(distLeft)
+            val rightSteps = outwardSteps(distRight)
+            val topSteps = outwardSteps(distTop)
+            val bottomSteps = outwardSteps(distBottom)
+
+            // Side neighbors
+            for (s in 1..leftSteps) tilesToRender.add(IJ(i0 - s, j0))
+            for (s in 1..rightSteps) tilesToRender.add(IJ(i0 + s, j0))
+            for (s in 1..topSteps) tilesToRender.add(IJ(i0, j0 - s))
+            for (s in 1..bottomSteps) tilesToRender.add(IJ(i0, j0 + s))
+
+            // Corner neighbors
+            for (sx in 1..leftSteps) {
+                for (sy in 1..topSteps) tilesToRender.add(IJ(i0 - sx, j0 - sy))
+                for (sy in 1..bottomSteps) tilesToRender.add(IJ(i0 - sx, j0 + sy))
+            }
+            for (sx in 1..rightSteps) {
+                for (sy in 1..topSteps) tilesToRender.add(IJ(i0 + sx, j0 - sy))
+                for (sy in 1..bottomSteps) tilesToRender.add(IJ(i0 + sx, j0 + sy))
+            }
+        }
+
+        fun makeLocation(lat: Double, lng: Double) =
+            Location("tile").apply {
+                latitude = lat
+                longitude = lng
+            }
+
+        val result = ArrayList<Tile>(tilesToRender.size)
+        for ((i, j) in tilesToRender) {
+            val x0 = i * N
+            val y0 = j * N
+            val x1 = x0 + N
+            val y1 = y0 + N
+
+            // In Mercator, +y is north. Tile top-left uses (x0, y1).
+            val (latTop, lngLeft) = inverseMercator(x0, y1)
+            val (latBottom, lngRight) = inverseMercator(x1, y0)
 
             result.add(
                 Tile(

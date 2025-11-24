@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.osmdroid.api.IGeoPoint
+import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.Projection
 import timber.log.Timber
 import java.security.MessageDigest
@@ -240,9 +241,9 @@ fun IGeoPoint.toLocation(): Location {
 }
 
 fun Projection.topLeft(): IGeoPoint {
-    return fromPixels(screenRect.top, screenRect.left, null, true)
+    return GeoPoint(boundingBox.latNorth, boundingBox.lonWest)
 }
 
 fun Projection.bottomRight(): IGeoPoint {
-    return fromPixels(screenRect.bottom, screenRect.right, null, true)
+    return GeoPoint(boundingBox.latSouth, boundingBox.lonEast)
 }
