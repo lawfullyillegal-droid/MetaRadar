@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.MainThread
 import f.cking.software.data.helpers.IntentHelper.ScreenNavigation.Companion.toNavigationCommand
 import f.cking.software.openUrl
 import f.cking.software.ui.MainActivity
@@ -14,47 +15,80 @@ import f.cking.software.ui.ScreenNavigationCommands
 import f.cking.software.utils.navigation.NavigationCommand
 import f.cking.software.utils.navigation.Router
 
+/**
+ * Helper class for managing system intents and navigation.
+ * 
+ * Utilizes the modern ActivityResultContracts API through [ActivityResultManager]
+ * for safe, lifecycle-aware file/directory operations.
+ */
 class IntentHelper(
     private val activityProvider: ActivityProvider,
     private val router: Router,
     private val context: Context,
 ) {
 
-    private var selectDirectoryLauncher: ActivityResultLauncher<Uri?>? = null
-    private var selectFileLauncher: ActivityResultLauncher<Array<String>>? = null
-    private var createFileLauncher: ActivityResultLauncher<String>? = null
+    private val activityResultManager = ActivityResultManager()
 
+    @MainThread
     fun setSelectDirectoryLauncher(launcher: ActivityResultLauncher<Uri?>) {
-        selectDirectoryLauncher = launcher
+        activityResultManager.setSelectDirectoryLauncher(launcher)
     }
 
+    @MainThread
     fun setSelectFileLauncher(launcher: ActivityResultLauncher<Array<String>>) {
-        selectFileLauncher = launcher
+        activityResultManager.setSelectFileLauncher(launcher)
     }
 
+    @MainThread
     fun setCreateFileLauncher(launcher: ActivityResultLauncher<String>) {
-        createFileLauncher = launcher
+        activityResultManager.setCreateFileLauncher(launcher)
     }
 
+    /**
+     * Launches a directory picker and returns the selected directory URI via callback.
+     * Uses the modern ActivityResultContracts.OpenDocumentTree API.
+     * 
+     * @param onResult Callback invoked with the selected directory URI, or null if cancelled
+     */
     fun selectDirectory(onResult: (directoryPath: Uri?) -> Unit) {
-        val launcher = selectDirectoryLauncher
-            ?: throw IllegalStateException("Select directory launcher is not initialized")
-        activityProvider.setActivityResultCallback(onResult)
-        launcher.launch(null)
+        activityResultManager.launchSelectDirectory(onResult)
     }
 
+    /**
+     * Launches a file picker and returns the selected file URI via callback.
+     * Uses the modern ActivityResultContracts.OpenDocument API.
+     * 
+     * @param onResult Callback invoked with the selected file URI, or null if cancelled
+     */
     fun selectFile(onResult: (filePath: Uri?) -> Unit) {
-        val launcher = selectFileLauncher
-            ?: throw IllegalStateException("Select file launcher is not initialized")
-        activityProvider.setActivityResultCallback(onResult)
-        launcher.launch(arrayOf("*/*"))
+        activityResultManager.launchSelectFile(onResult)
     }
 
+    /**
+     * Launches a file creation dialog and returns the created file URI via callback.
+     * Uses the modern ActivityResultContracts.CreateDocument API.
+     * 
+     * @param fileName The suggested file name
+     * @param onResult Callback invoked with the created file URI, or null if cancelled
+     */
     fun createFile(fileName: String, onResult: (directoryPath: Uri?) -> Unit) {
-        val launcher = createFileLauncher
-            ?: throw IllegalStateException("Create file launcher is not initialized")
-        activityProvider.setActivityResultCallback(onResult)
-        launcher.launch(fileName)
+        activityResultManager.launchCreateFile(fileName, onResult)
+    }
+
+    /**
+     * Internal method to handle activity results.
+     * Called by MainActivity when an activity result is received.
+     */
+    internal fun handleActivityResult(uri: Uri?) {
+        activityResultManager.handleResult(uri)
+    }
+
+    /**
+     * Clears all activity result launchers.
+     * Should be called when the activity is destroyed.
+     */
+    internal fun clearActivityResults() {
+        activityResultManager.clear()
     }
 
     fun openAppSettings() {

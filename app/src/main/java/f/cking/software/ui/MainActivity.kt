@@ -70,20 +70,21 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Register activity result launchers
+        // Register activity result launchers using modern ActivityResultContracts API
+        // These launchers are lifecycle-aware and automatically handle configuration changes
         val selectDirectoryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            activityProvider.invokeActivityResultCallback(uri)
+            intentHelper.handleActivityResult(uri)
         }
 
         val selectFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            activityProvider.invokeActivityResultCallback(uri)
+            intentHelper.handleActivityResult(uri)
         }
 
         val createFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/sqlite")) { uri ->
-            activityProvider.invokeActivityResultCallback(uri)
+            intentHelper.handleActivityResult(uri)
         }
 
-        // Set launchers in IntentHelper
+        // Inject launchers into IntentHelper's ActivityResultManager
         intentHelper.setSelectDirectoryLauncher(selectDirectoryLauncher)
         intentHelper.setSelectFileLauncher(selectFileLauncher)
         intentHelper.setCreateFileLauncher(createFileLauncher)
@@ -168,6 +169,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         activityProvider.setActivity(null)
+        intentHelper.clearActivityResults()
         router.detachNavigator()
         super.onDestroy()
     }
