@@ -58,10 +58,11 @@ class IntentHelper(
      * Launches a file picker and returns the selected file URI via callback.
      * Uses the modern ActivityResultContracts.OpenDocument API.
      * 
+     * @param mimeTypes Array of MIME types to filter (default: all files)
      * @param onResult Callback invoked with the selected file URI, or null if cancelled
      */
-    fun selectFile(onResult: (filePath: Uri?) -> Unit) {
-        activityResultManager.launchSelectFile(onResult)
+    fun selectFile(mimeTypes: Array<String> = arrayOf("*/*"), onResult: (filePath: Uri?) -> Unit) {
+        activityResultManager.launchSelectFile(mimeTypes, onResult)
     }
 
     /**

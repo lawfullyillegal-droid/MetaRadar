@@ -17,8 +17,6 @@ import java.util.concurrent.atomic.AtomicReference
  * - Automatic cleanup after callback invocation
  * - No memory leaks from stale callbacks
  * - Lifecycle-aware through ActivityResultLauncher
- * 
- * @author MetaRadar Team
  */
 class ActivityResultManager {
 
@@ -88,11 +86,12 @@ class ActivityResultManager {
     /**
      * Launches file selection and stores the callback for result handling.
      * 
+     * @param mimeTypes Array of MIME types to filter (default: ["*/*"] for all files)
      * @param onResult Callback to be invoked with the selected file URI or null if cancelled
      * @throws IllegalStateException if the launcher is not initialized
      */
     @MainThread
-    fun launchSelectFile(onResult: (filePath: Uri?) -> Unit) {
+    fun launchSelectFile(mimeTypes: Array<String> = arrayOf("*/*"), onResult: (filePath: Uri?) -> Unit) {
         val launcher = selectFileLauncher
             ?: throw IllegalStateException("Select file launcher is not initialized. Call setSelectFileLauncher() first.")
         
@@ -100,7 +99,7 @@ class ActivityResultManager {
             throw IllegalStateException("Another activity result operation is already in progress")
         }
         
-        launcher.launch(arrayOf("*/*"))
+        launcher.launch(mimeTypes)
     }
 
     /**
