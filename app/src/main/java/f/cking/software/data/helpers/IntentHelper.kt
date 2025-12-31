@@ -1,12 +1,12 @@
 package f.cking.software.data.helpers
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.result.ActivityResultLauncher
 import f.cking.software.data.helpers.IntentHelper.ScreenNavigation.Companion.toNavigationCommand
 import f.cking.software.openUrl
 import f.cking.software.ui.MainActivity
@@ -20,34 +20,38 @@ class IntentHelper(
     private val context: Context,
 ) {
 
-    /**
-     * TODO: this code us unsafe
-     */
-    private val pendingConsumers = mutableMapOf<Int, (result: Uri?) -> Unit>()
+    private var selectDirectoryLauncher: ActivityResultLauncher<Uri?>? = null
+    private var selectFileLauncher: ActivityResultLauncher<Array<String>>? = null
+    private var createFileLauncher: ActivityResultLauncher<String>? = null
+
+    fun setSelectDirectoryLauncher(launcher: ActivityResultLauncher<Uri?>) {
+        selectDirectoryLauncher = launcher
+    }
+
+    fun setSelectFileLauncher(launcher: ActivityResultLauncher<Array<String>>) {
+        selectFileLauncher = launcher
+    }
+
+    fun setCreateFileLauncher(launcher: ActivityResultLauncher<String>) {
+        createFileLauncher = launcher
+    }
 
     fun selectDirectory(onResult: (directoryPath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_SELECT_DIRECTORY)
-        pendingConsumers[ACTIVITY_RESULT_SELECT_DIRECTORY] = onResult
+        activityProvider.setActivityResultCallback(onResult)
+        selectDirectoryLauncher?.launch(null)
+            ?: throw IllegalStateException("Select directory launcher is not initialized")
     }
 
     fun selectFile(onResult: (filePath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-        }
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_SELECT_FILE)
-        pendingConsumers[ACTIVITY_RESULT_SELECT_FILE] = onResult
+        activityProvider.setActivityResultCallback(onResult)
+        selectFileLauncher?.launch(arrayOf("*/*"))
+            ?: throw IllegalStateException("Select file launcher is not initialized")
     }
 
     fun createFile(fileName: String, onResult: (directoryPath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            putExtra(Intent.EXTRA_TITLE, fileName)
-            type = "application/sqlite"
-        }
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_CREATE_FILE)
-        pendingConsumers[ACTIVITY_RESULT_CREATE_FILE] = onResult
+        activityProvider.setActivityResultCallback(onResult)
+        createFileLauncher?.launch(fileName)
+            ?: throw IllegalStateException("Create file launcher is not initialized")
     }
 
     fun openAppSettings() {
@@ -113,20 +117,7 @@ class IntentHelper(
         }
     }
 
-    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        val consumer = pendingConsumers[requestCode]
-        if (resultCode == Activity.RESULT_OK) {
-            consumer?.invoke(data?.data)
-        } else {
-            consumer?.invoke(null)
-        }
-    }
-
     companion object {
-        private const val ACTIVITY_RESULT_SELECT_DIRECTORY = 1
-        private const val ACTIVITY_RESULT_SELECT_FILE = 2
-        private const val ACTIVITY_RESULT_CREATE_FILE = 3
-
         private const val ACTION_OPEN_SCREEN = "action_open_screen"
         private const val SCREEN_NAME = "screen_name"
     }

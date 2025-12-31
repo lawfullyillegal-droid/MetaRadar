@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -68,6 +69,24 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Register activity result launchers
+        val selectDirectoryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            activityProvider.invokeActivityResultCallback(uri)
+        }
+
+        val selectFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            activityProvider.invokeActivityResultCallback(uri)
+        }
+
+        val createFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/sqlite")) { uri ->
+            activityProvider.invokeActivityResultCallback(uri)
+        }
+
+        // Set launchers in IntentHelper
+        intentHelper.setSelectDirectoryLauncher(selectDirectoryLauncher)
+        intentHelper.setSelectFileLauncher(selectFileLauncher)
+        intentHelper.setCreateFileLauncher(createFileLauncher)
 
         val navigationBarStyle = if (isDarkModeOn()) {
             SystemBarStyle.dark(Color.TRANSPARENT)
@@ -134,12 +153,6 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         permissionHelper.onPermissionResult(requestCode, permissions, grantResults)
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        intentHelper.handleActivityResult(requestCode, resultCode, data)
     }
 
     override fun onNewIntent(intent: Intent, caller: ComponentCaller) {
