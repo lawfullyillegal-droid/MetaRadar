@@ -37,21 +37,24 @@ class IntentHelper(
     }
 
     fun selectDirectory(onResult: (directoryPath: Uri?) -> Unit) {
-        activityProvider.setActivityResultCallback(onResult)
-        selectDirectoryLauncher?.launch(null)
+        val launcher = selectDirectoryLauncher
             ?: throw IllegalStateException("Select directory launcher is not initialized")
+        activityProvider.setActivityResultCallback(onResult)
+        launcher.launch(null)
     }
 
     fun selectFile(onResult: (filePath: Uri?) -> Unit) {
-        activityProvider.setActivityResultCallback(onResult)
-        selectFileLauncher?.launch(arrayOf("*/*"))
+        val launcher = selectFileLauncher
             ?: throw IllegalStateException("Select file launcher is not initialized")
+        activityProvider.setActivityResultCallback(onResult)
+        launcher.launch(arrayOf("*/*"))
     }
 
     fun createFile(fileName: String, onResult: (directoryPath: Uri?) -> Unit) {
-        activityProvider.setActivityResultCallback(onResult)
-        createFileLauncher?.launch(fileName)
+        val launcher = createFileLauncher
             ?: throw IllegalStateException("Create file launcher is not initialized")
+        activityProvider.setActivityResultCallback(onResult)
+        launcher.launch(fileName)
     }
 
     fun openAppSettings() {
