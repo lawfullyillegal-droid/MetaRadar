@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -68,6 +69,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Register activity result launchers using modern ActivityResultContracts API
+        // These launchers are lifecycle-aware and automatically handle configuration changes
+        val selectDirectoryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            intentHelper.handleActivityResult(uri)
+        }
+
+        val selectFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            intentHelper.handleActivityResult(uri)
+        }
+
+        val createFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/sqlite")) { uri ->
+            intentHelper.handleActivityResult(uri)
+        }
+
+        // Inject launchers into IntentHelper's ActivityResultManager
+        intentHelper.setSelectDirectoryLauncher(selectDirectoryLauncher)
+        intentHelper.setSelectFileLauncher(selectFileLauncher)
+        intentHelper.setCreateFileLauncher(createFileLauncher)
 
         val navigationBarStyle = if (isDarkModeOn()) {
             SystemBarStyle.dark(Color.TRANSPARENT)
@@ -136,12 +156,6 @@ class MainActivity : AppCompatActivity() {
         permissionHelper.onPermissionResult(requestCode, permissions, grantResults)
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        intentHelper.handleActivityResult(requestCode, resultCode, data)
-    }
-
     override fun onNewIntent(intent: Intent, caller: ComponentCaller) {
         super.onNewIntent(intent, caller)
         intentHelper.tryHandleIntent(intent)
@@ -155,6 +169,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         activityProvider.setActivity(null)
+        intentHelper.clearActivityResults()
         router.detachNavigator()
         super.onDestroy()
     }

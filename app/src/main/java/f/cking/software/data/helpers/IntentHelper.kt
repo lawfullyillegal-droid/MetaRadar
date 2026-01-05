@@ -1,12 +1,13 @@
 package f.cking.software.data.helpers
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.MainThread
 import f.cking.software.data.helpers.IntentHelper.ScreenNavigation.Companion.toNavigationCommand
 import f.cking.software.openUrl
 import f.cking.software.ui.MainActivity
@@ -14,40 +15,81 @@ import f.cking.software.ui.ScreenNavigationCommands
 import f.cking.software.utils.navigation.NavigationCommand
 import f.cking.software.utils.navigation.Router
 
+/**
+ * Helper class for managing system intents and navigation.
+ * 
+ * Utilizes the modern ActivityResultContracts API through [ActivityResultManager]
+ * for safe, lifecycle-aware file/directory operations.
+ */
 class IntentHelper(
     private val activityProvider: ActivityProvider,
     private val router: Router,
     private val context: Context,
 ) {
 
+    private val activityResultManager = ActivityResultManager()
+
+    @MainThread
+    fun setSelectDirectoryLauncher(launcher: ActivityResultLauncher<Uri?>) {
+        activityResultManager.setSelectDirectoryLauncher(launcher)
+    }
+
+    @MainThread
+    fun setSelectFileLauncher(launcher: ActivityResultLauncher<Array<String>>) {
+        activityResultManager.setSelectFileLauncher(launcher)
+    }
+
+    @MainThread
+    fun setCreateFileLauncher(launcher: ActivityResultLauncher<String>) {
+        activityResultManager.setCreateFileLauncher(launcher)
+    }
+
     /**
-     * TODO: this code us unsafe
+     * Launches a directory picker and returns the selected directory URI via callback.
+     * Uses the modern ActivityResultContracts.OpenDocumentTree API.
+     * 
+     * @param onResult Callback invoked with the selected directory URI, or null if cancelled
      */
-    private val pendingConsumers = mutableMapOf<Int, (result: Uri?) -> Unit>()
-
     fun selectDirectory(onResult: (directoryPath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_SELECT_DIRECTORY)
-        pendingConsumers[ACTIVITY_RESULT_SELECT_DIRECTORY] = onResult
+        activityResultManager.launchSelectDirectory(onResult)
     }
 
-    fun selectFile(onResult: (filePath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-        }
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_SELECT_FILE)
-        pendingConsumers[ACTIVITY_RESULT_SELECT_FILE] = onResult
+    /**
+     * Launches a file picker and returns the selected file URI via callback.
+     * Uses the modern ActivityResultContracts.OpenDocument API.
+     * 
+     * @param mimeTypes Array of MIME types to filter (default: all files)
+     * @param onResult Callback invoked with the selected file URI, or null if cancelled
+     */
+    fun selectFile(mimeTypes: Array<String> = arrayOf("*/*"), onResult: (filePath: Uri?) -> Unit) {
+        activityResultManager.launchSelectFile(mimeTypes, onResult)
     }
 
+    /**
+     * Launches a file creation dialog and returns the created file URI via callback.
+     * Uses the modern ActivityResultContracts.CreateDocument API.
+     * 
+     * @param fileName The suggested file name
+     * @param onResult Callback invoked with the created file URI, or null if cancelled
+     */
     fun createFile(fileName: String, onResult: (directoryPath: Uri?) -> Unit) {
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            putExtra(Intent.EXTRA_TITLE, fileName)
-            type = "application/sqlite"
-        }
-        activityProvider.requireActivity().startActivityForResult(intent, ACTIVITY_RESULT_CREATE_FILE)
-        pendingConsumers[ACTIVITY_RESULT_CREATE_FILE] = onResult
+        activityResultManager.launchCreateFile(fileName, onResult)
+    }
+
+    /**
+     * Internal method to handle activity results.
+     * Called by MainActivity when an activity result is received.
+     */
+    internal fun handleActivityResult(uri: Uri?) {
+        activityResultManager.handleResult(uri)
+    }
+
+    /**
+     * Clears all activity result launchers.
+     * Should be called when the activity is destroyed.
+     */
+    internal fun clearActivityResults() {
+        activityResultManager.clear()
     }
 
     fun openAppSettings() {
@@ -113,20 +155,7 @@ class IntentHelper(
         }
     }
 
-    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        val consumer = pendingConsumers[requestCode]
-        if (resultCode == Activity.RESULT_OK) {
-            consumer?.invoke(data?.data)
-        } else {
-            consumer?.invoke(null)
-        }
-    }
-
     companion object {
-        private const val ACTIVITY_RESULT_SELECT_DIRECTORY = 1
-        private const val ACTIVITY_RESULT_SELECT_FILE = 2
-        private const val ACTIVITY_RESULT_CREATE_FILE = 3
-
         private const val ACTION_OPEN_SCREEN = "action_open_screen"
         private const val SCREEN_NAME = "screen_name"
     }
